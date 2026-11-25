@@ -1,0 +1,63 @@
+# Home Assistant stack for the Samsung X120 (Home Assistant Container install).
+# Copy .env.example to .env and set your radio paths before starting.
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: homeassistant
+    volumes:
+      - ./ha:/config
+      - /etc/localtime:/etc/localtime:ro
+      - /run/dbus:/run/dbus:ro
+    network_mode: host          # web UI on :8123, needed for discovery and Matter
+    restart: unless-stopped
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    ports:
+      - "1883:1883"
+    restart: unless-stopped
+
+  zigbee2mqtt:
+    image: ghcr.io/koenkk/zigbee2mqtt:latest
+    container_name: zigbee2mqtt
+    depends_on: [mosquitto]
+    volumes:
+      - ./z2m:/app/data
+      - /run/udev:/run/udev:ro
+    devices:
+      - ${ZIGBEE_RADIO}:/dev/ttyACM0
+    environment:
+      - TZ=America/Edmonton
+    ports:
+      - "8080:8080"             # Zigbee2MQTT UI; first run opens the setup page
+    restart: unless-stopped
+
+  matter-server:
+    image: ghcr.io/home-assistant-libs/python-matter-server:stable
+    container_name: matter-server
+    volumes:
+      - ./matter:/data
+      - /run/dbus:/run/dbus:ro
+    network_mode: host          # ws://localhost:5580/ws
+    security_opt:
+      - apparmor:unconfined
+    restart: unless-stopped
+
+  otbr:                         # OpenThread Border Router on the second ZBT-2
+    image: openthread/otbr:latest
+    container_name: otbr
+    privileged: true
+    network_mode: host          # REST API on http://localhost:8081
+    volumes:
+      - ./otbr:/var/lib/thread
+    devices:
+      - ${THREAD_RADIO}:/dev/ttyACM1
+    environment:
+      - INFRA_IF_NAME=${LAN_INTERFACE}
+      - RADIO_URL=spinel+hdlc+uart:///dev/ttyACM1?uart-baudrate=460800
+    restart: unless-stopped

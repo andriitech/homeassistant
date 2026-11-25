@@ -1,0 +1,9 @@
+.env
+ha/
+z2m/
+matter/
+otbr/
+mosquitto/data/
+mosquitto/log/
+mosquitto/config/passwd
+backups/
